@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
 export default function Login() {
+  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -11,9 +13,22 @@ export default function Login() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError('Credenciales incorrectas. Verifica tu correo y contraseña.')
-    setLoading(false)
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) {
+        console.error('Supabase auth error:', error)
+        setError(error.message === 'Email not confirmed'
+          ? 'Tu correo no está confirmado. Revisa la configuración del usuario en Supabase.'
+          : 'Credenciales incorrectas. Verifica tu correo y contraseña.')
+      } else {
+        navigate('/', { replace: true })
+      }
+    } catch (err) {
+      console.error('Error de conexión con Supabase:', err)
+      setError('No se pudo conectar con el servidor. Revisa tu archivo .env y que hayas reiniciado "npm run dev".')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
