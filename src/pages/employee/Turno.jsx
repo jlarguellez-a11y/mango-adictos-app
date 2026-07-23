@@ -41,7 +41,7 @@ export default function Turno() {
 
   const totalPending = history
     .filter((s) => s.end_time && !s.paid)
-    .reduce((sum, s) => sum + (s.amount_to_pay || 0), 0)
+    .reduce((sum, s) => sum + Number(s.amount_to_pay || 0) + Number(s.bonus || 0), 0)
 
   return (
     <div className="space-y-4">
@@ -74,7 +74,7 @@ export default function Turno() {
       </div>
 
       <div className="bg-mango-50 border border-mango-200 rounded-xl p-4 text-center">
-        <p className="text-sm text-gray-500">Pendiente por pagar (turnos cerrados)</p>
+        <p className="text-sm text-gray-500">💰 Saldo a favor (lo que te deben pagar)</p>
         <p className="text-2xl font-bold text-mango-600">${totalPending.toLocaleString('es-CO')}</p>
       </div>
 
@@ -95,7 +95,12 @@ export default function Turno() {
               </div>
               <div className="text-right">
                 {s.amount_to_pay != null && (
-                  <div className="font-semibold">${s.amount_to_pay.toLocaleString('es-CO')}</div>
+                  <div className="font-semibold">
+                    ${s.amount_to_pay.toLocaleString('es-CO')}
+                    {Number(s.bonus) > 0 && (
+                      <span className="text-mango-600"> + ${Number(s.bonus).toLocaleString('es-CO')} bono</span>
+                    )}
+                  </div>
                 )}
                 <div className={`text-xs ${s.paid ? 'text-green-600' : 'text-orange-500'}`}>
                   {s.end_time ? (s.paid ? 'Pagado' : 'Pendiente') : ''}

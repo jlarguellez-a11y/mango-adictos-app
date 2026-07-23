@@ -7,6 +7,8 @@ export default function Productos() {
   const [newCategory, setNewCategory] = useState('')
   const [newProduct, setNewProduct] = useState({ name: '', price: '', cost: '', category_id: '' })
   const [message, setMessage] = useState('')
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -52,6 +54,52 @@ export default function Productos() {
   async function toggleActive(product) {
     await supabase.from('products').update({ active: !product.active }).eq('id', product.id)
     loadData()
+  }
+
+  function startEdit(p) {
+    setEditingId(p.id)
+    setEditForm({ name: p.name, price: p.price, cost: p.cost, category_id: p.category_id })
+    setMessage('')
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditForm(null)
+  }
+
+  async function saveEdit(id) {
+    if (!editForm.name || !editForm.price || !editForm.category_id) return
+    const { error } = await supabase
+      .from('products')
+      .update({
+        name: editForm.name,
+        price: Number(editForm.price),
+        cost: Number(editForm.cost || 0),
+        category_id: editForm.category_id,
+      })
+      .eq('id', id)
+    if (error) setMessage('Error: ' + error.message)
+    else {
+      cancelEdit()
+      loadData()
+    }
+  }
+
+  async function deleteProduct(product) {
+    if (!window.confirm(`¿Eliminar "${product.name}"? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('products').delete().eq('id', product.id)
+    if (error) {
+      // probablemente tiene ventas asociadas (restricción de la base de datos)
+      const confirmDeactivate = window.confirm(
+        'No se puede eliminar porque ya tiene ventas registradas. ¿Quieres desactivarlo en su lugar (dejará de aparecer en el punto de venta)?'
+      )
+      if (confirmDeactivate) {
+        await supabase.from('products').update({ active: false }).eq('id', product.id)
+        loadData()
+      }
+    } else {
+      loadData()
+    }
   }
 
   return (
@@ -119,21 +167,71 @@ export default function Productos() {
 
       <div className="bg-white rounded-xl border p-4">
         <h2 className="font-bold mb-3">Productos existentes</h2>
-        <div className="space-y-2 text-sm">
+        <div className="space-y-2 text-sm max-h-[36rem] overflow-y-auto">
           {products.map((p) => (
-            <div key={p.id} className="flex items-center justify-between border-b pb-2">
-              <div>
-                <div className="font-medium">{p.name}</div>
-                <div className="text-gray-400">{p.categories?.name} · ${Number(p.price).toLocaleString('es-CO')}</div>
-              </div>
-              <button
-                onClick={() => toggleActive(p)}
-                className={`text-xs px-3 py-1 rounded-full ${
-                  p.active ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'
-                }`}
-              >
-                {p.active ? 'Activo' : 'Inactivo'}
-              </button>
+            <div key={p.id} className="border-b pb-2">
+              {editingId === p.id ? (
+                <div className="bg-mango-50 rounded-lg p-3 space-y-2">
+                  <input
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                    placeholder="Nombre"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      value={editForm.price}
+                      onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                      className="border rounded-lg px-2 py-1.5 text-sm"
+                      placeholder="Precio"
+                    />
+                    <input
+                      type="number"
+                      value={editForm.cost}
+                      onChange={(e) => setEditForm({ ...editForm, cost: e.target.value })}
+                      className="border rounded-lg px-2 py-1.5 text-sm"
+                      placeholder="Costo"
+                    />
+                  </div>
+                  <select
+                    value={editForm.category_id}
+                    onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}
+                    className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <button onClick={() => saveEdit(p.id)} className="flex-1 bg-mango-500 text-white py-1.5 rounded-lg text-xs font-medium">
+                      Guardar
+                    </button>
+                    <button onClick={cancelEdit} className="flex-1 bg-gray-200 py-1.5 rounded-lg text-xs font-medium">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-gray-400">{p.categories?.name} · ${Number(p.price).toLocaleString('es-CO')}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleActive(p)}
+                      className={`text-xs px-3 py-1 rounded-full ${
+                        p.active ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {p.active ? 'Activo' : 'Inactivo'}
+                    </button>
+                    <button onClick={() => startEdit(p)} className="text-xs text-gray-400 hover:text-mango-600">✏️</button>
+                    <button onClick={() => deleteProduct(p)} className="text-xs text-gray-400 hover:text-red-600">🗑️</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

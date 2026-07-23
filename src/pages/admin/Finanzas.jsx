@@ -7,6 +7,8 @@ export default function Finanzas() {
   const [categories, setCategories] = useState([])
   const [movements, setMovements] = useState([])
   const [form, setForm] = useState({ type: 'egreso', category_id: '', amount: '', description: '', movement_date: today() })
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -43,6 +45,43 @@ export default function Finanzas() {
       created_by: profile.id,
     })
     setForm({ ...form, amount: '', description: '' })
+    loadData()
+  }
+
+  function startEdit(m) {
+    setEditingId(m.id)
+    setEditForm({
+      type: m.type,
+      category_id: m.category_id,
+      amount: m.amount,
+      description: m.description || '',
+      movement_date: m.movement_date,
+    })
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditForm(null)
+  }
+
+  async function saveEdit(id) {
+    await supabase
+      .from('movements')
+      .update({
+        type: editForm.type,
+        category_id: editForm.category_id,
+        amount: Number(editForm.amount),
+        description: editForm.description,
+        movement_date: editForm.movement_date,
+      })
+      .eq('id', id)
+    cancelEdit()
+    loadData()
+  }
+
+  async function deleteMovement(id) {
+    if (!window.confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) return
+    await supabase.from('movements').delete().eq('id', id)
     loadData()
   }
 
@@ -119,18 +158,90 @@ export default function Finanzas() {
 
       <div className="bg-white rounded-xl border p-4">
         <h2 className="font-bold mb-3">Movimientos recientes</h2>
-        <div className="space-y-2 text-sm max-h-96 overflow-y-auto">
+        <div className="space-y-2 text-sm max-h-[32rem] overflow-y-auto">
           {movements.map((m) => (
-            <div key={m.id} className="flex justify-between border-b pb-2">
-              <div>
-                <div className="font-medium">{m.movement_categories?.name}</div>
-                <div className="text-gray-400">{m.movement_date} {m.description ? '· ' + m.description : ''}</div>
-              </div>
-              <div className={m.type === 'ingreso' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                {m.type === 'ingreso' ? '+' : '-'}${Number(m.amount).toLocaleString('es-CO')}
-              </div>
+            <div key={m.id} className="border-b pb-2">
+              {editingId === m.id ? (
+                <div className="bg-mango-50 rounded-lg p-3 space-y-2">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, type: 'ingreso', category_id: '' })}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium ${editForm.type === 'ingreso' ? 'bg-green-500 text-white' : 'bg-gray-100'}`}
+                    >
+                      Ingreso
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, type: 'egreso', category_id: '' })}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium ${editForm.type === 'egreso' ? 'bg-red-500 text-white' : 'bg-gray-100'}`}
+                    >
+                      Egreso
+                    </button>
+                  </div>
+                  <select
+                    value={editForm.category_id}
+                    onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}
+                    className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                  >
+                    <option value="">Selecciona una categoría</option>
+                    {categories.filter((c) => c.type === editForm.type).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      value={editForm.amount}
+                      onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                      className="border rounded-lg px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      type="date"
+                      value={editForm.movement_date}
+                      onChange={(e) => setEditForm({ ...editForm, movement_date: e.target.value })}
+                      className="border rounded-lg px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <input
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    placeholder="Descripción"
+                    className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEdit(m.id)}
+                      className="flex-1 bg-mango-500 text-white py-1.5 rounded-lg text-xs font-medium"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="flex-1 bg-gray-200 py-1.5 rounded-lg text-xs font-medium"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center gap-2">
+                  <div>
+                    <div className="font-medium">{m.movement_categories?.name}</div>
+                    <div className="text-gray-400">{m.movement_date} {m.description ? '· ' + m.description : ''}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={m.type === 'ingreso' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                      {m.type === 'ingreso' ? '+' : '-'}${Number(m.amount).toLocaleString('es-CO')}
+                    </div>
+                    <button onClick={() => startEdit(m)} className="text-xs text-gray-400 hover:text-mango-600">✏️</button>
+                    <button onClick={() => deleteMovement(m.id)} className="text-xs text-gray-400 hover:text-red-600">🗑️</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
+          {!movements.length && <p className="text-gray-400">Aún no hay movimientos registrados.</p>}
         </div>
       </div>
     </div>
