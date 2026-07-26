@@ -6,6 +6,8 @@ export default function Finanzas() {
   const { profile } = useAuth()
   const [categories, setCategories] = useState([])
   const [movements, setMovements] = useState([])
+  const [saleDetails, setSaleDetails] = useState({}) // sale_id -> "2x Producto, 1x Otro"
+  const [todaySalesTotal, setTodaySalesTotal] = useState(0)
   const [form, setForm] = useState({ type: 'egreso', category_id: '', amount: '', description: '', movement_date: today() })
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState(null)
@@ -24,11 +26,38 @@ export default function Finanzas() {
       .from('movements')
       .select('*, movement_categories(name)')
       .order('movement_date', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(100)
     setCategories(cats || [])
     setMovements(movs || [])
     const egresoCats = (cats || []).filter((c) => c.type === 'egreso')
     if (egresoCats.length) setForm((f) => ({ ...f, category_id: f.category_id || egresoCats[0].id }))
+
+    // Detalle de productos para movimientos generados por una venta POS
+    const saleIds = [...new Set((movs || []).map((m) => m.related_sale_id).filter(Boolean))]
+    if (saleIds.length) {
+      const { data: items } = await supabase
+        .from('sale_items')
+        .select('sale_id, quantity, products(name)')
+        .in('sale_id', saleIds)
+      const details = {}
+      for (const it of items || []) {
+        const line = `${it.quantity}x ${it.products?.name || 'Producto'}`
+        details[it.sale_id] = details[it.sale_id] ? `${details[it.sale_id]}, ${line}` : line
+      }
+      setSaleDetails(details)
+    } else {
+      setSaleDetails({})
+    }
+
+    // Total de ventas de hoy (todas las ventas, todos los empleados)
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+    const { data: todaySales } = await supabase
+      .from('sales')
+      .select('total')
+      .gte('sold_at', startOfDay.toISOString())
+    setTodaySalesTotal((todaySales || []).reduce((s, r) => s + Number(r.total), 0))
   }
 
   const filteredCategories = categories.filter((c) => c.type === form.type)
@@ -91,7 +120,8 @@ export default function Finanzas() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <SummaryCard label="Ventas de hoy" value={todaySalesTotal} color="text-mango-600" />
         <SummaryCard label="Ingresos" value={ingresos} color="text-green-600" />
         <SummaryCard label="Egresos" value={egresos} color="text-red-600" />
         <SummaryCard label="Balance" value={balance} color={balance >= 0 ? 'text-green-600' : 'text-red-600'} />
@@ -227,8 +257,15 @@ export default function Finanzas() {
               ) : (
                 <div className="flex justify-between items-center gap-2">
                   <div>
-                    <div className="font-medium">{m.movement_categories?.name}</div>
-                    <div className="text-gray-400">{m.movement_date} {m.description ? '· ' + m.description : ''}</div>
+                    <div className="font-medium">
+                      {m.related_sale_id
+                        ? (saleDetails[m.related_sale_id] || 'Venta POS')
+                        : (m.movement_categories?.name || 'Sin categoría')}
+                    </div>
+                    <div className="text-gray-400">
+                      {formatDateTime(m.movement_date, m.created_at)}
+                      {m.description ? ' · ' + m.description : ''}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={m.type === 'ingreso' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
@@ -246,6 +283,15 @@ export default function Finanzas() {
       </div>
     </div>
   )
+}
+
+function formatDateTime(movementDate, createdAt) {
+  const datePart = new Date(movementDate + 'T00:00:00').toLocaleDateString('es-CO', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  })
+  if (!createdAt) return datePart
+  const timePart = new Date(createdAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+  return `${datePart}, ${timePart}`
 }
 
 function SummaryCard({ label, value, color }) {

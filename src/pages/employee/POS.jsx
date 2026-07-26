@@ -11,6 +11,7 @@ export default function POS() {
   const [paymentMethod, setPaymentMethod] = useState('efectivo')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [todayTotal, setTodayTotal] = useState(0)
 
   useEffect(() => {
     loadData()
@@ -22,6 +23,18 @@ export default function POS() {
     setCategories(cats || [])
     setProducts(prods || [])
     if (cats?.length) setActiveCategory(cats[0].id)
+    await loadTodayTotal()
+  }
+
+  async function loadTodayTotal() {
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+    const { data } = await supabase
+      .from('sales')
+      .select('total')
+      .eq('employee_id', profile.id)
+      .gte('sold_at', startOfDay.toISOString())
+    setTodayTotal((data || []).reduce((sum, r) => sum + Number(r.total), 0))
   }
 
   function addToCart(product) {
@@ -78,6 +91,7 @@ export default function POS() {
     } else {
       setMessage('✅ Venta registrada correctamente')
       setCart([])
+      loadTodayTotal()
     }
     setSaving(false)
   }
@@ -85,7 +99,13 @@ export default function POS() {
   const visibleProducts = products.filter((p) => p.category_id === activeCategory)
 
   return (
-    <div className="grid md:grid-cols-3 gap-4">
+    <div className="space-y-3">
+      <div className="bg-mango-50 border border-mango-200 rounded-xl p-3 flex justify-between items-center">
+        <span className="text-sm text-gray-600">🍧 Ventas de hoy</span>
+        <span className="text-lg font-bold text-mango-600">${todayTotal.toLocaleString('es-CO')}</span>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-2">
         <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
           {categories.map((c) => (
@@ -162,6 +182,7 @@ export default function POS() {
           {saving ? 'Guardando...' : 'Confirmar venta'}
         </button>
         {message && <p className="text-sm mt-2">{message}</p>}
+      </div>
       </div>
     </div>
   )
