@@ -7,10 +7,25 @@ export default function Turno() {
   const [openShift, setOpenShift] = useState(null)
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(false)
+  const [hourlyRate, setHourlyRate] = useState(0)
+  const [now, setNow] = useState(new Date())
 
   useEffect(() => {
     loadShifts()
+    loadRate()
   }, [])
+
+  // refresca el estimado en vivo cada 30 segundos mientras hay un turno abierto
+  useEffect(() => {
+    if (!openShift) return
+    const interval = setInterval(() => setNow(new Date()), 30000)
+    return () => clearInterval(interval)
+  }, [openShift])
+
+  async function loadRate() {
+    const { data } = await supabase.from('shift_settings').select('hourly_rate').eq('id', 1).single()
+    setHourlyRate(Number(data?.hourly_rate || 0))
+  }
 
   async function loadShifts() {
     const { data } = await supabase
@@ -43,6 +58,9 @@ export default function Turno() {
     .filter((s) => s.end_time && !s.paid)
     .reduce((sum, s) => sum + Number(s.amount_to_pay || 0) + Number(s.bonus || 0), 0)
 
+  const elapsedHours = openShift ? (now - new Date(openShift.start_time)) / 1000 / 3600 : 0
+  const estimatedPay = elapsedHours * hourlyRate
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl border p-6 text-center">
@@ -50,6 +68,12 @@ export default function Turno() {
           <>
             <p className="text-sm text-gray-500 mb-2">
               Turno iniciado a las {new Date(openShift.start_time).toLocaleTimeString('es-CO')}
+            </p>
+            <p className="text-sm text-gray-400 mb-1">
+              Tarifa: ${hourlyRate.toLocaleString('es-CO')} / hora
+            </p>
+            <p className="text-lg font-bold text-mango-600 mb-3">
+              Pago estimado hasta ahora: ${Math.round(estimatedPay).toLocaleString('es-CO')}
             </p>
             <button
               onClick={endShift}

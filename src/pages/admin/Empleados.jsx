@@ -7,6 +7,8 @@ export default function Empleados() {
   const [selected, setSelected] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState(null)
+  const [hourlyRate, setHourlyRate] = useState('')
+  const [rateSaved, setRateSaved] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -18,8 +20,18 @@ export default function Empleados() {
       .from('shifts')
       .select('*')
       .order('start_time', { ascending: false })
+    const { data: settings } = await supabase.from('shift_settings').select('hourly_rate').eq('id', 1).single()
     setEmployees(emps || [])
     setShifts(shs || [])
+    setHourlyRate(settings?.hourly_rate ?? '')
+  }
+
+  async function saveHourlyRate(e) {
+    e.preventDefault()
+    if (!hourlyRate) return
+    await supabase.from('shift_settings').update({ hourly_rate: Number(hourlyRate) }).eq('id', 1)
+    setRateSaved(true)
+    setTimeout(() => setRateSaved(false), 2000)
   }
 
   async function markPaid(shift) {
@@ -101,7 +113,29 @@ export default function Empleados() {
   }
 
   return (
-    <div className="grid md:grid-cols-2 gap-6">
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border p-4">
+        <h2 className="font-bold mb-1">💵 Tarifa por hora trabajada</h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Este valor se multiplica automáticamente por las horas de cada turno para calcular el pago.
+        </p>
+        <form onSubmit={saveHourlyRate} className="flex gap-2 items-center">
+          <span className="text-gray-500">$</span>
+          <input
+            type="number"
+            value={hourlyRate}
+            onChange={(e) => setHourlyRate(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm w-40"
+          />
+          <span className="text-sm text-gray-400">por hora</span>
+          <button className="bg-mango-500 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            Guardar
+          </button>
+          {rateSaved && <span className="text-green-600 text-sm">✅ Guardado</span>}
+        </form>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
       <div className="bg-white rounded-xl border p-4">
         <h2 className="font-bold mb-3">Empleados</h2>
         <div className="space-y-2">
@@ -225,6 +259,7 @@ export default function Empleados() {
             <p className="text-gray-400">Este empleado no tiene turnos registrados.</p>
           )}
         </div>
+      </div>
       </div>
     </div>
   )
